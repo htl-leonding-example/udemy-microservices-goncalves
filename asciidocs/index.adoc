@@ -6,6 +6,7 @@ ifndef::imagesdir[:imagesdir: images]
 :sourcedir: ../src/main/java
 :icons: font
 :sectnums:    // Nummerierung der Überschriften / section numbering
+:sectnumlevels: 5
 :toc: left
 
 //Need this blank line after ifdef, don't know why...
@@ -17,10 +18,581 @@ ifdef::backend-html5[]
 == Preface
 
 * This is only an excerpt of this course:
-** https://agoncal.teachable.com/p/course-building-microservices-with-quarkus
-** https://www.udemy.com/course/quarkus-building-microservices-with-quarkus
+** https://agoncal.teachable.com/p/course-building-microservices-with-quarkus[, window="_blank"]
+** https://www.udemy.com/course/quarkus-building-microservices-with-quarkus[, window="_blank"]
 * It is strongly recommended to work through the original course.
 
+* Course-repo: https://github.com/agoncal/agoncal-course-quarkus-microservices[agoncal/agoncal-course-quarkus-microservices, window="_blank"]
 
-=== Preparations
+== Monoliths vs. Microservices
+
+image:005-monolith-vs-microservice.png[]
+
+== Preparations
+
+=== JDK
+
+[source, bash]
+----
+java -version
+----
+
+----
+openjdk version "17" 2021-09-14
+OpenJDK Runtime Environment Temurin-17+35 (build 17+35)
+OpenJDK 64-Bit Server VM Temurin-17+35 (build 17+35, mixed mode, sharing)
+----
+
+
+A good choice for the Java JDK is https://adoptium.net/[Adoptium/Temurin, window="_blank"]
+
+[%autowidth]
+|===
+|OS |How to install
+
+|Windows
+a|
+. install https://sdkman.io/[sdkman, window="_blank"]
+. `sdk install java 17.0.0-tem`
+* https://api.sdkman.io/2/candidates/java/linux/versions/list?installed=[Available JDK-versions, window="_blank"]
+|linux (Ubuntu)
+|`sudo apt install openjdk-17-jdk`
+
+|MacOS
+|`brew install --cask temurin`
+
+|===
+
+
+
+=== GraalVM
+
+* https://www.graalvm.org[GraalVM, window="_blank"]
+* https://github.com/graalvm/graalvm-ce-builds/releases/tag/vm-21.2.0[Download GRAALVM from github, window="_blank"]
+
+.Erstellen eines Symlinks
+----
+ln -s /opt/graalvm-ce-java16-21.2.0 /opt/graalvm
+----
+
+----
+export GRAALVM_HOME=/opt/graalvm/Contents/Home
+env | grep GRAAL
+$GRAALVM_HOME/bin/java -version
+$GRAALVM_HOME/bin/native-image --version
+----
+
+.to install https://www.graalvm.org/reference-manual/native-image/#install-native-image[native-image]
+[source, bash]
+----
+$GRAALVM_HOME/bin/gu install native-image
+----
+
+.https://github.com/graalvm/graalvm-ce-builds/releases/tag/vm-21.2.0[Entfernen des Quarantäne Flags bei macOS]
+[source, bash]
+----
+sudo xattr -r -d com.apple.quarantine path/to/graalvm/folder/
+----
+
+=== Maven
+
+.Installieren von maven unter Linux
+----
+sudo apt install maven
+----
+
+[source, bash]
+----
+mvn -version
+----
+
+=== Docker
+
+
+
+[source, bash]
+----
+docker version
+----
+
+=== RestClient
+
+==== curl
+
+[source, bash]
+----
+curl --version
+----
+
+==== httpie
+
+[source, bash]
+----
+http --version
+----
+
+== Bootstrapping the Microservices
+
+.Create a project root folder
+[source, bash]
+----
+mkdir vintage-store
+cd vintage-store
+----
+
+[source, bash]
+----
+#!/usr/bin/env bash
+mvn -U io.quarkus:quarkus-maven-plugin:create \
+        -DprojectGroupId=at.htl.microservices \
+        -DprojectArtifactId=rest-number \
+        -DclassName="at.htl.microservices.number.NumberResource" \
+        -Dpath="/api/numbers" \
+        -Dextensions="resteasy-jsonb, smallrye-openapi"
+----
+
+[source, bash]
+----
+#!/usr/bin/env bash
+mvn -U io.quarkus:quarkus-maven-plugin:create \
+        -DprojectGroupId=at.htl.microservices \
+        -DprojectArtifactId=rest-book \
+        -DclassName="at.htl.microservices.book.BookResource" \
+        -Dpath="/api/books" \
+        -Dextensions="resteasy-jsonb, smallrye-openapi"
+----
+
+.open the project "vintage-store"
+image:010-book-numbers-in-ide.png[]
+
+[source, bash]
+----
+cd rest-number
+./mvnw clean quarkus:dev
+----
+
+
+image:015-first-run.png[]
+
+== Develop the Number Microservice
+
+
+* We will change the port from 8080 to 8701
+
+=== Exposing the Number REST Endpoint
+
+.at.htl.microservices.number.IsbnNumbers
+[source,java]
+----
+package at.htl.microservices.number;
+
+import java.time.Instant;
+
+public class IsbnNumbers {
+
+    public String isbn10;
+    public String isbn13;
+    public Instant generationDate;
+
+    @Override
+    public String toString() {
+        return "IsbnNumbers{" +
+                "isbn10='" + isbn10 + '\'' +
+                ", isbn13='" + isbn13 + '\'' +
+                ", generationDate=" + generationDate +
+                '}';
+    }
+}
+----
+
+.at.htl.microservices.number.NumberResource
+[source,java]
+----
+package at.htl.microservices.number;
+
+import org.jboss.logging.Logger;
+
+import javax.inject.Inject;
+import javax.ws.rs.GET;
+import javax.ws.rs.Path;
+import javax.ws.rs.Produces;
+import javax.ws.rs.core.MediaType;
+import java.time.Instant;
+import java.util.Random;
+
+@Path("/api/numbers")
+public class NumberResource {
+
+    @Inject
+    Logger logger; // <.>
+
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    public IsbnNumbers generateIsbnNumbers() {
+        IsbnNumbers isbnNumbers = new IsbnNumbers();
+        isbnNumbers.isbn13 = "13-" + new Random().nextInt(100_000_000);
+        isbnNumbers.isbn10 = "10-" + new Random().nextInt(100_000);
+        isbnNumbers.generationDate = Instant.now();
+        logger.info("Numbers generated " + isbnNumbers); // <.>
+
+        return isbnNumbers;
+    }
+}
+----
+
+<.> inject a logger
+<.> use the logger
+
+image:020-IsbnNumbers.png[]
+
+=== Excursus: JSON-B
+
+
+|===
+|API |Description
+
+|`@JsonbProperty`
+|Allows customisation of a field name
+
+|`@JsonbTransient`
+|Prevents mapping of a field
+
+|`@JsonbDateFormat`
+|Customises the date format of a field
+
+|`@JsonbNumberFormat`
+|Customises the number format of a field
+
+|===
+
+
+
+
+[source,bash]
+----
+http localhost:8080/api/numbers
+----
+
+.at.htl.microservices.number.IsbnNumbers
+[source,java]
+----
+public class IsbnNumbers {
+
+    @JsonbProperty("isbn_13")
+    public String isbn13;
+    @JsonbProperty("isbn_10")
+    public String isbn10;
+    @JsonbTransient
+    public Instant generationDate;
+
+    // toString()
+}
+----
+
+
+.Output
+----
+HTTP/1.1 200 OK
+Content-Length: 46
+Content-Type: application/json
+
+{
+    "isbn_10": "10-76318",
+    "isbn_13": "13-70991667"
+}
+
+----
+
+=== Excursus: OpenAPI
+
+|===
+|API |Description
+
+|`@APIResponse`
+|Describes the endpoint's response
+
+|`@Operation`
+|Describes a single API operation on a path
+
+|`@OpenAPIDefinition`
+|Root document object of the OpenAPI document
+
+|`@Parameter`
+|The name of the method parameter
+
+|`@Schema`
+|Allows the definition of input and output data types
+
+|`@Tag`
+|Used to add tags to the REST endpoint contract
+
+|===
+
+=== OpenAPI/Swagger
+
+.at.htl.microservices.number.IsbnNumbers
+[source,java]
+----
+package at.htl.microservices.number;
+
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
+
+import javax.json.bind.annotation.JsonbProperty;
+import javax.json.bind.annotation.JsonbTransient;
+import java.time.Instant;
+
+@Schema(description = "Several ISBN numbers for books")
+public class IsbnNumbers {
+
+    @Schema(required = true)
+    @JsonbProperty("isbn_13")
+    public String isbn13;
+    @Schema(required = true)
+    @JsonbProperty("isbn_10")
+    public String isbn10;
+    @JsonbTransient
+    public Instant generationDate;
+
+    @Override
+    public String toString() {
+        return "IsbnNumbers{" +
+                "isbn10='" + isbn10 + '\'' +
+                ", isbn13='" + isbn13 + '\'' +
+                ", generationDate=" + generationDate +
+                '}';
+    }
+}
+
+----
+
+.at.htl.microservices.number.NumberResource
+[source,java]
+----
+package at.htl.microservices.number;
+
+import org.eclipse.microprofile.openapi.annotations.Operation;
+import org.eclipse.microprofile.openapi.annotations.tags.Tag;
+import org.jboss.logging.Logger;
+
+import javax.inject.Inject;
+import javax.ws.rs.GET;
+import javax.ws.rs.Path;
+import javax.ws.rs.Produces;
+import javax.ws.rs.core.MediaType;
+import java.time.Instant;
+import java.util.Random;
+
+@Path("/api/numbers")
+@Tag(name="")
+public class NumberResource {
+
+    @Inject
+    Logger logger;
+
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(
+            summary = "Generate book numbers",
+            description = "ISBN 13 and ISBN 10 numbers"
+    )
+    public IsbnNumbers generateIsbnNumbers() {
+        IsbnNumbers isbnNumbers = new IsbnNumbers();
+        isbnNumbers.isbn13 = "13-" + new Random().nextInt(100_000_000);
+        isbnNumbers.isbn10 = "10-" + new Random().nextInt(100_000);
+        isbnNumbers.generationDate = Instant.now();
+        logger.info("Numbers generated " + isbnNumbers);
+
+        return isbnNumbers;
+    }
+}
+----
+
+.at.htl.microservices.number.NumberMicroservice
+[source,java]
+----
+package at.htl.microservices.number;
+
+import org.eclipse.microprofile.openapi.annotations.ExternalDocumentation;
+import org.eclipse.microprofile.openapi.annotations.OpenAPIDefinition;
+import org.eclipse.microprofile.openapi.annotations.info.Contact;
+import org.eclipse.microprofile.openapi.annotations.info.Info;
+import org.eclipse.microprofile.openapi.annotations.tags.Tag;
+
+import javax.ws.rs.core.Application;
+
+@OpenAPIDefinition(
+        info = @Info(
+                title = "Number API",
+                description = "Generates ISBN book numbers",
+                version = "1.0",
+                contact = @Contact(name = "@my-name", url = "bit.ly/htl-leonding")
+        ),
+        externalDocs = @ExternalDocumentation(url = "bit.ly/htl-leonding"),
+        tags = {
+                @Tag(name = "api", description = "Public API"),
+                @Tag(name = "numbers", description = "Interested in numbers")
+        }
+)
+public class NumberMicroservice extends Application {
+}
+----
+
+[source,bash]
+----
+http localhost:8080/q/openapi
+----
+
+.Output in yaml
+[source,yaml]
+----
+openapi: 3.0.3
+info:
+  title: Number API
+  description: Generates ISBN book numbers
+  contact:
+    name: '@my-name'
+    url: bit.ly/htl-leonding
+  version: "1.0"
+externalDocs:
+  url: bit.ly/htl-leonding
+tags:
+- name: api
+  description: Public API
+- name: numbers
+  description: Interested in numbers
+- name: ""
+paths:
+  /api/numbers:
+    get:
+      tags:
+      - ""
+      summary: Generate book numbers
+      description: ISBN 13 and ISBN 10 numbers
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IsbnNumbers'
+components:
+  schemas:
+    IsbnNumbers:
+      description: Several ISBN numbers for books
+      required:
+      - isbn_10
+      - isbn_13
+      type: object
+      properties:
+        isbn_10:
+          type: string
+        isbn_13:
+          type: string
+
+----
+
+[source,bash]
+----
+http localhost:8080/q/openapi Accept:application/json
+----
+
+.Output in json
+[source,json]
+----
+{
+    "components": {
+        "schemas": {
+            "IsbnNumbers": {
+                "description": "Several ISBN numbers for books",
+                "properties": {
+                    "isbn_10": {
+                        "type": "string"
+                    },
+                    "isbn_13": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "isbn_10",
+                    "isbn_13"
+                ],
+                "type": "object"
+            }
+        }
+    },
+    "externalDocs": {
+        "url": "bit.ly/htl-leonding"
+    },
+    "info": {
+        "contact": {
+            "name": "@my-name",
+            "url": "bit.ly/htl-leonding"
+        },
+        "description": "Generates ISBN book numbers",
+        "title": "Number API",
+        "version": "1.0"
+    },
+    "openapi": "3.0.3",
+    "paths": {
+        "/api/numbers": {
+            "get": {
+                "description": "ISBN 13 and ISBN 10 numbers",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/IsbnNumbers"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    }
+                },
+                "summary": "Generate book numbers",
+                "tags": [
+                    ""
+                ]
+            }
+        }
+    },
+    "tags": [
+        {
+            "description": "Public API",
+            "name": "api"
+        },
+        {
+            "description": "Interested in numbers",
+            "name": "numbers"
+        },
+        {
+            "name": ""
+        }
+    ]
+}
+----
+
+* http://localhost:8080/q/swagger-ui/
+
+image:021-swagger-ui.png[]
+
+
+[source,java]
+----
+
+----
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
