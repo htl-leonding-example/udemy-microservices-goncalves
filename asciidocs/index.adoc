@@ -56,13 +56,14 @@ a|
 . `sdk install java 17.0.0-tem`
 * https://api.sdkman.io/2/candidates/java/linux/versions/list?installed=[Available JDK-versions, window="_blank"]
 |linux (Ubuntu)
-|`sudo apt install openjdk-17-jdk`
+|`sudo apt install openjdk-11-jdk`
 
 |MacOS
 |`brew install --cask temurin`
 
 |===
 
+* JDK 11 is sufficient - Quarkus uses Java 11
 
 
 === GraalVM
@@ -177,7 +178,6 @@ image:015-first-run.png[]
 == Develop the Number Microservice
 
 
-* We will change the port from 8080 to 8701
 
 === Exposing the Number REST Endpoint
 
@@ -583,16 +583,351 @@ image:021-swagger-ui.png[]
 ----
 
 
+=== Change the Port for the Endpoints
 
 
+* We will change the port from 8080 to 8701
+
+.src/main/resources/application.properties
+[source,properties]
+----
+quarkus.http.port=8701
+----
+
+.We test the port
+[source,shell]
+----
+http :8701/api/numbers
+----
+
+.output
+[source,http request]
+----
+HTTP/1.1 200 OK
+Content-Length: 46
+Content-Type: application/json
+
+{
+    "isbn_10": "10-86168",
+    "isbn_13": "13-67790513"
+}
+----
+
+=== Create a banner file
+
+* https://patorjk.com/software/taag
+* ie font "ANSI Shadow"
+
+.src/main/resources/default_banner.txt
+----
+███╗   ██╗██╗   ██╗███╗   ███╗██████╗ ███████╗██████╗
+████╗  ██║██║   ██║████╗ ████║██╔══██╗██╔════╝██╔══██╗
+██╔██╗ ██║██║   ██║██╔████╔██║██████╔╝█████╗  ██████╔╝
+██║╚██╗██║██║   ██║██║╚██╔╝██║██╔══██╗██╔══╝  ██╔══██╗
+██║ ╚████║╚██████╔╝██║ ╚═╝ ██║██████╔╝███████╗██║  ██║
+╚═╝  ╚═══╝ ╚═════╝ ╚═╝     ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═╝
+----
+
+=== Dev UI
+
+.http://localhost:8701/q/dev/
+image::030-dev-ui.png[]
+
+.http://localhost:8701/q/dev/io.quarkus.quarkus-vertx-http/config
+image::031-dev-ui-config.png[]
+
+=== Testing the Number Microservice
+
+* JUnit and restAssured sind bereits in der pom.xml eingetragen
+
+.at.htl.microservices.number.NumberResourceTest
+[source,java]
+----
+package at.htl.microservices.number;
+
+import io.quarkus.test.junit.QuarkusTest;
+import org.junit.jupiter.api.Test;
+
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.startsWith;
+import static org.hamcrest.Matchers.hasKey;
+import static org.hamcrest.Matchers.not;
+
+@QuarkusTest
+public class NumberResourceTest {
+
+    @Test
+    public void testHelloEndpoint() {
+        given()
+          .when().get("/api/numbers")
+          .then()
+             .statusCode(200)
+             .body("isbn_13", startsWith("13-"))
+             .body("isbn_10", startsWith("10-"))
+             .body(not(hasKey("generationDate")));
+    }
+}
+----
 
 
+== Develop the Book Microservice
+
+.src/main/java/at/htl/microservices/book/Book.java
+[source,java]
+----
+package at.htl.microservices.book;
+
+import java.time.Instant;
+
+public class Book {
+
+    public String isbn13;
+    public String title;
+    public String author;
+    public int yearOfPublication;
+    public String genre;
+    public Instant creationTime;
+
+    @Override
+    public String toString() {
+        return "Book{" +
+                "isbn13='" + isbn13 + '\'' +
+                ", title='" + title + '\'' +
+                ", author='" + author + '\'' +
+                ", yearOfPublication=" + yearOfPublication +
+                ", genre='" + genre + '\'' +
+                ", creationTime=" + creationTime +
+                '}';
+    }
+}
+----
+
+.src/main/java/at/htl/microservices/book/BookResource.java
+[source,java]
+----
+package at.htl.microservices.book;
+
+import org.jboss.logging.Logger;
+
+import javax.inject.Inject;
+import javax.ws.rs.*;
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
+import java.time.Instant;
+
+@Path("/api/books")
+public class BookResource {
+
+    @Inject
+    Logger logger;
+
+    @POST
+    @Produces(MediaType.APPLICATION_JSON)
+    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+    public Response createABook(
+            @FormParam("title") String title,
+            @FormParam("author") String author,
+            @FormParam("year") int yearOfPubication,
+            @FormParam("genre") String genre
+    ) {
+        Book book = new Book();
+        book.isbn13 = "We will get it from the Number Microservice";
+        book.title = title;
+        book.author = author;
+        book.yearOfPublication = yearOfPubication;
+        book.genre = genre;
+        book.creationTime = Instant.now();
+
+        logger.infof("Book created: %s", book);
+        return Response.status(201).entity(book).build();
+    }
+}
+----
+
+.Try it with curl
+[source,shell]
+----
+curl -X POST http://localhost:8080/api/books \
+     -d "title=Quarkus&author=Susi&year=2021&genre=IT"
+----
+
+.response
+[source,json]
+----
+{"author":"Susi","creationTime":"2021-10-07T22:40:42.540116Z","genre":"IT","isbn13":"We will get it from the Number Microservice","title":"Quarkus","yearOfPublication":2021}
+----
+
+=== Customizing the JSON Output
 
 
+.src/main/java/at/htl/microservices/book/Book.java
+[source,java]
+----
+public class Book {
+
+    @JsonbProperty("isbn_13") // <.>
+    public String isbn13;
+    public String title;
+    public String author;
+    @JsonbProperty("year_of_publication")  // <.>
+    public int yearOfPublication;
+    public String genre;
+    @JsonbProperty("creation_date") // <.>
+    @JsonbDateFormat("yyyy-MM-dd") // <.>
+    public Instant creationTime;
+
+    // ...
+}
+----
+
+.Try it with curl
+[source,shell]
+----
+curl -X POST http://localhost:8080/api/books \
+     -d "title=Quarkus&author=Susi&year=2021&genre=IT"
+----
+
+.response
+[source,json]
+----
+{"author":"Susi","creation_date":"2021-10-07","genre":"IT","isbn_13":"We will get it from the Number Microservice","title":"Quarkus","year_of_publication":2021}
+----
+
+=== Documenting the Endpoint
+
+* start the book-microservice and look at the swagger
+
+.src/main/java/at/htl/microservices/book/BookResource.java
+[source,java, highlight=2;11-14]
+----
+@Path("/api/books")
+@Tag(name = "Book REST endpoint")
+public class BookResource {
+
+    @Inject
+    Logger logger;
+
+    @POST
+    @Produces(MediaType.APPLICATION_JSON)
+    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+    @Operation(
+            summary = "Creates a book",
+            description = "Creates a book with an ISBN number"
+    )
+    public Response createABook(
+            @FormParam("title") String title,
+            @FormParam("author") String author,
+            @FormParam("year") int yearOfPubication,
+            @FormParam("genre") String genre
+    ) {
+         // ...
+    }
+}
+----
 
 
+.src/main/java/at/htl/microservices/book/Book.java
+[source,java,highlight=5;7;15]
+----
+@Schema(description = "This is a book")
+public class Book {
+
+    @JsonbProperty("isbn_13")
+    @Schema(required = true)
+    public String isbn13;
+    @Schema(required = true)
+    public String title;
+    public String author;
+    @JsonbProperty("year_of_publication")
+    public int yearOfPublication;
+    public String genre;
+    @JsonbProperty("creation_date")
+    @JsonbDateFormat("yyyy-MM-dd")
+    @Schema(implementation = String.class, format = "date")
+    public Instant creationTime;
+
+    //...
+}
+----
+
+.src/main/resources/application.properties
+[source,properties]
+----
+mp.openapi.extensions.smallrye.info.title=Book API
+mp.openapi.extensions.smallrye.info.version=1.0
+mp.openapi.extensions.smallrye.info.description=Creates books
+mp.openapi.extensions.smallrye.info.contact.name=@susi
+mp.openapi.extensions.smallrye.info.contact.url=https://twitter.com/susi
+----
+
+image::032-swagger.png[]
 
 
+=== Configuring Quarkus
+
+* https://patorjk.com/software/taag
+* ie font "ANSI Shadow"
+
+.src/main/resources/default_banner.txt
+----
+██████╗  ██████╗  ██████╗ ██╗  ██╗
+██╔══██╗██╔═══██╗██╔═══██╗██║ ██╔╝
+██████╔╝██║   ██║██║   ██║█████╔╝
+██╔══██╗██║   ██║██║   ██║██╔═██╗
+██████╔╝╚██████╔╝╚██████╔╝██║  ██╗
+╚═════╝  ╚═════╝  ╚═════╝ ╚═╝  ╚═╝
+----
 
 
+.src/main/resources/application.properties
+[source,properties, highlight=1]
+----
+quarkus.http.port=8702
+
+mp.openapi.extensions.smallrye.info.title=Book API
+mp.openapi.extensions.smallrye.info.version=1.0
+mp.openapi.extensions.smallrye.info.description=Creates books
+mp.openapi.extensions.smallrye.info.contact.name=@susi
+mp.openapi.extensions.smallrye.info.contact.url=https://twitter.com/susi
+----
+
+
+=== Testing the Endpoint
+
+.at/htl/microservices/book/BookResourceTest.java
+[source,java]
+----
+package at.htl.microservices.book;
+
+import io.quarkus.test.junit.QuarkusTest;
+import org.junit.jupiter.api.Test;
+
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.startsWith;
+
+@QuarkusTest
+public class BookResourceTest {
+
+    @Test
+    public void shouldCreateABook() {
+        given()
+                .formParam("title", "Understanding Quarkus")
+                .formParam("author","Susi")
+                .formParam("year",2021)
+                .formParam("genre", "IT")
+          .when()
+                .post("/api/books")
+          .then()
+                .statusCode(201)
+                .body("isbn_13", startsWith("13-"))
+                .body("title", is("Understanding Quarkus"))
+                .body("author", is("Susi"))
+                .body("year_of_publication", is(2020))
+                .body("genre", is("IT"))
+                .body("creation_date", startsWith("2021"));
+    }
+}
+----
 

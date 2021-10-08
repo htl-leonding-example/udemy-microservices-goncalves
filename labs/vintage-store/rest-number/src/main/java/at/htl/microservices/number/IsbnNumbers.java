@@ -10,11 +10,11 @@ import java.time.Instant;
 public class IsbnNumbers {
 
     @Schema(required = true)
-    @JsonbProperty("isbn_13")
-    public String isbn13;
-    @Schema(required = true)
     @JsonbProperty("isbn_10")
     public String isbn10;
+    @Schema(required = true)
+    @JsonbProperty("isbn_13")
+    public String isbn13;
     @JsonbTransient
     public Instant generationDate;
 

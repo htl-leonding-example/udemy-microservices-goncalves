@@ -16,7 +16,7 @@ cp -r -p -v asciidocs/*.adoc $BUILD_DIR
 
 docker run --rm \
            -v ${PWD}/$BUILD_DIR:/documents \
-           asciidoctor/docker-asciidoctor  /bin/bash -c "asciidoctor \
+           asciidoctor/docker-asciidoctor:1.12.0  /bin/bash -c "asciidoctor \
            -r asciidoctor-diagram \
            -a icons=font \
            -a experimental=true \
