@@ -1,0 +1,12 @@
+GET localhost:8701/api/numbers
+
+###
+
+POST localhost:8702/api/books
+Content-Type: application/x-www-form-urlencoded
+
+title=Quarkus&author=Susi&year=2021&genre=IT
+
+###
+
+

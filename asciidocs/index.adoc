@@ -794,6 +794,29 @@ curl -X POST http://localhost:8080/api/books \
 {"author":"Susi","creation_date":"2021-10-07","genre":"IT","isbn_13":"We will get it from the Number Microservice","title":"Quarkus","year_of_publication":2021}
 ----
 
+.httpie
+[source,shell script]
+----
+http --form POST :8080/api/books title='Quarkus' author='Susi' year=2021 genre='IT'
+----
+
+.response
+[source,json]
+----
+HTTP/1.1 201 Created
+Content-Length: 163
+Content-Type: application/json
+
+{
+    "author": "Susi",
+    "creation_date": "2021-10-11",
+    "genre": "IT",
+    "isbn_13": "13-we will get it from the number microservice",
+    "title": "Quarkus",
+    "year_of_publication": 2021
+}
+----
+
 === Documenting the Endpoint
 
 * start the book-microservice and look at the swagger
@@ -915,7 +938,7 @@ public class BookResourceTest {
         given()
                 .formParam("title", "Understanding Quarkus")
                 .formParam("author","Susi")
-                .formParam("year",2021)
+                .formParam("year",2020)
                 .formParam("genre", "IT")
           .when()
                 .post("/api/books")
@@ -930,4 +953,258 @@ public class BookResourceTest {
     }
 }
 ----
+
+
+== Establishing a Resilient Communication
+
+* https://microprofile.io/project/eclipse/microprofile-rest-client
+* microprofile REST Client is built on top of JAX-RS Client
+* Type-safe way to invoke endpoints
+* Injecting a proxy interface
+
+[%autowidth]
+|===
+|API |Description
+
+|@RegisterRestClient
+|Marker annotation to register a rest client at runtime
+
+|@RestClient
+|Injects an instance of a REST client in a type-safe way
+
+|===
+
+.add rest-client extension to book-microservice
+[source,bash]
+----
+./mvnw quarkus:add-extension -Dextensions="rest-client"
+----
+
+
+.start book-microservice
+[source,shell]
+----
+./mvnw clean quarkus:dev
+----
+
+.start number-microservice
+[source,bash]
+----
+cd ..
+cd rest-number
+./mvnw clean quarkus:dev
+----
+
+.requests.http
+[source,shell]
+----
+GET localhost:8701/api/numbers
+
+###
+
+POST localhost:8702/api/books
+Content-Type: application/x-www-form-urlencoded
+
+title=Quarkus&author=Susi&year=2021&genre=IT
+
+###
+----
+
+=== Implement REST-Client
+
+.at.htl.microservices.book.NumberProxy
+[source,java,highlight=10;12;16]
+----
+package at.htl.microservices.book;
+
+import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
+
+import javax.ws.rs.GET;
+import javax.ws.rs.Path;
+import javax.ws.rs.Produces;
+import javax.ws.rs.core.MediaType;
+
+@RegisterRestClient
+@Path("/api/numbers")
+public interface NumberProxy {
+
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    IsbnThirteen generateIsbnNumbers();
+
+}
+----
+
+.at.htl.microservices.book.IsbnThirteen
+[source,java]
+----
+package at.htl.microservices.book;
+
+import javax.json.bind.annotation.JsonbProperty;
+
+public class IsbnThirteen {
+
+    @JsonbProperty("isbn_13") // <.>
+    public String isbn13;
+
+}
+----
+
+<.> You have to change the name, so it works
+
+.at.htl.microservices.book.BookResource
+[source,java,highlight=16-18;28]
+----
+package at.htl.microservices.book;
+
+import org.eclipse.microprofile.openapi.annotations.Operation;
+import org.eclipse.microprofile.openapi.annotations.tags.Tag;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
+
+// import ...
+
+@Path("/api/books")
+@Tag(name="Book REST endpoint")
+public class BookResource {
+
+    @Inject
+    Logger logger;
+
+    @RestClient
+    NumberProxy proxy;
+
+    @POST
+    @Produces(MediaType.APPLICATION_JSON)
+    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+    //  @Operation(...)
+    public Response createABook(
+            //...
+    ) {
+        Book book = new Book();
+        book.isbn13 = proxy.generateIsbnNumbers().isbn13;
+        book.title = title;
+        book.author = author;
+        book.yearOfPublication = yearOfPublication;
+        book.genre = genre;
+        book.creationTime = Instant.now();
+
+        logger.infof("Book created: %s", book);
+        return Response.status(201).entity(book).build();
+    }
+}
+----
+
+[source,properties,highlight=3]
+----
+quarkus.http.port=8702
+
+at.htl.microservices.book.NumberProxy/mp-rest/url=http://localhost:8701
+----
+
+.Does it work? (requests.http)
+[source]
+----
+POST localhost:8702/api/books
+Content-Type: application/x-www-form-urlencoded
+
+title=Quarkus&author=Susi&year=2021&genre=IT
+----
+
+.Yes, it works!
+----
+http://localhost:8702/api/books
+
+HTTP/1.1 201 Created
+Content-Length: 128
+Content-Type: application/json
+
+{
+  "author": "Susi",
+  "creation_date": "2021-10-14",
+  "genre": "IT",
+  "isbn_13": "13-14543507",
+  "title": "Quarkus",
+  "year_of_publication": 2021
+}
+----
+
+* It is possible to shorten the endpoint url.
+
+[source,properties,highlight=3]
+----
+quarkus.http.port=8702
+
+number.proxy/mp-rest/url=http://localhost:8701
+----
+
+.Add the config key to the annotation
+[source,java,highlight=3]
+----
+// ...
+
+@RegisterRestClient(configKey = "number.proxy")
+@Path("/api/numbers")
+public interface NumberProxy {
+
+    // ...
+
+}
+----
+
+* Check, if it is still working
+
+=== Mocking the Communication
+
+* https://quarkus.io/guides/getting-started-testing#mock-support
+* Mocking ... Simulate the behavior of a real objects
+* Quarkus has a built-in mocking functionality
+* When this is not sufficient, you can use the JUnit Mockito extension
+* So we can't test the book microservice w/o running the number microservice
+
+[%autowidth]
+|===
+|API |Description
+
+|@Mock
+|Overrides the bean you wish to mock with another class
+
+|QuarkusMock
+|Used to temporarily mock out any bean
+
+|@InjectMock
+|Results in a mock being injected in test methods
+
+|InjectSpy
+|Spies the logical path that was taken
+
+|===
+
+==== Stop the number-microservice
+
+.response of the POST request
+----
+http://localhost:8702/api/books
+
+HTTP/1.1 500 Internal Server Error
+content-type: text/html; charset=utf-8
+content-length: 19595
+----
+
+====
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
