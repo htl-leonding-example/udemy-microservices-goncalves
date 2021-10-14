@@ -1260,7 +1260,7 @@ image:033-run-tests.png[]
 
 ==== Implement Fault Tolerance
 
-[source,java,highlight=26-27;46-63;65-63]
+[source,java,highlight=26-27;46-63;65-72]
 ----
 package at.htl.microservices.book;
 
