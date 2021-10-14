@@ -1190,9 +1190,151 @@ content-type: text/html; charset=utf-8
 content-length: 19595
 ----
 
-====
+=== Create the MockNumberProxy
+
+.src.test.java.at.htl.microservices.book.MockNumberProxy
+[source,java]
+----
+package at.htl.microservices.book;
+
+import io.quarkus.test.Mock;
+import org.eclipse.microprofile.rest.client.inject.RestClient;
+
+@Mock
+@RestClient
+public class MockNumberProxy implements NumberProxy {
+
+    @Override
+    public IsbnThirteen generateIsbnNumbers() {
+        IsbnThirteen isbnThirteen = new IsbnThirteen();
+        isbnThirteen.isbn13 = "13-mock";
+        return isbnThirteen;
+    }
+
+}
+----
+
+=== Run the Unit-Test
+
+.The unit test works
+image:033-run-tests.png[]
 
 
+
+
+
+=== Dealing with Communication Failure
+
+* https://microprofile.io/project/eclipse/microprofile-fault-tolerance
+* microprofile fault tolerance
+* remote communication fails
+* microservices under load
+* compensate failures
+* build resilient architecture
+* detect issue and handle automatically
+* SmallRye fault tolerance
+
+[%autowidth]
+|===
+|API |Description
+
+|Fallback
+|Provides an alternative solution for a failed execution
+
+|@Retry
+|Defines a criteria on when to retry
+
+|@Timeout
+|Defines a duration for timeout
+
+|===
+
+
+==== Add SmallRye Fault Tolerance extension
+
+.book-microservice
+[source,shell]
+----
+./mvnw quarkus:add-extension -Dextensions="io.quarkus:quarkus-smallrye-fault-tolerance"
+----
+
+==== Implement Fault Tolerance
+
+[source,java,highlight=25-26;44-61]
+----
+package at.htl.microservices.book;
+
+// import ...
+import javax.json.bind.JsonbBuilder;
+import java.io.FileNotFoundException;
+import java.io.PrintWriter;
+import java.time.Instant;
+
+@Path("/api/books")
+@Tag(name = "Book REST endpoint")
+public class BookResource {
+
+    @Inject
+    Logger logger;
+
+    @RestClient
+    NumberProxy proxy;
+
+    @POST
+    @Produces(MediaType.APPLICATION_JSON)
+    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+    @Operation(
+            summary = "Creates a book",
+            description = "Creates a book with ISBN number"
+    )
+    @Retry(maxRetries = 3, delay = 3000)
+    @Fallback(fallbackMethod = "fallbackOnCreatingABook")
+    public Response createABook(
+            @FormParam("title") String title,
+            @FormParam("author") String author,
+            @FormParam("year") int yearOfPublication,
+            @FormParam("genre") String genre
+    ) {
+        Book book = new Book();
+        book.isbn13 = proxy.generateIsbnNumbers().isbn13;
+        book.title = title;
+        book.author = author;
+        book.yearOfPublication = yearOfPublication;
+        book.genre = genre;
+        book.creationTime = Instant.now();
+
+        logger.infof("Book created: %s", book);
+        return Response.status(201).entity(book).build();
+    }
+
+    public Response fallbackOnCreatingABook(
+            String title,
+            String author,
+            int yearOfPublication,
+            String genre
+    ) throws FileNotFoundException {
+        Book book = new Book();
+        book.isbn13 = "Will be set later";
+        book.title = title;
+        book.author = author;
+        book.yearOfPublication = yearOfPublication;
+        book.genre = genre;
+        book.creationTime = Instant.now();
+        saveBookOnDisk(book);
+
+        logger.warnf("Book saved on disk: %s", book);
+        return Response.status(206).entity(book).build();
+    }
+
+    private void saveBookOnDisk(Book book) throws FileNotFoundException {
+
+        String bookJson = JsonbBuilder.create().toJson(book);
+        try (PrintWriter out = new PrintWriter("book-" + Instant.now().toEpochMilli() + ".json")) {
+            out.println(bookJson);
+        }
+    }
+}
+----
 
 
 
