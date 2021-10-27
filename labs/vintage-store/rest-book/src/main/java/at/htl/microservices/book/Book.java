@@ -25,6 +25,7 @@ public class Book {
 
     @Override
     public String toString() {
+        System.out.println();
         return "Book{" +
                 "isbn13='" + isbn13 + '\'' +
                 ", title='" + title + '\'' +

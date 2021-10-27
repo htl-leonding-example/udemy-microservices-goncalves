@@ -8,6 +8,7 @@ ifndef::imagesdir[:imagesdir: images]
 :sectnums:    // Nummerierung der Überschriften / section numbering
 :sectnumlevels: 5
 :toc: left
+:experimental: true
 
 //Need this blank line after ifdef, don't know why...
 ifdef::backend-html5[]
@@ -957,10 +958,12 @@ public class BookResourceTest {
 
 == Establishing a Resilient Communication
 
-* https://microprofile.io/project/eclipse/microprofile-rest-client
+* https://microprofile.io/project/eclipse/microprofile-rest-client[, window="_blank"]
 * microprofile REST Client is built on top of JAX-RS Client
 * Type-safe way to invoke endpoints
 * Injecting a proxy interface
+
+image::032a-rest-client.png[]
 
 [%autowidth]
 |===
@@ -973,6 +976,8 @@ public class BookResourceTest {
 |Injects an instance of a REST client in a type-safe way
 
 |===
+
+* https://code.quarkus.io/?extension-search=rest-client[REST Client in quarkus.io, window="_blank"]
 
 .add rest-client extension to book-microservice
 [source,bash]
@@ -1053,7 +1058,7 @@ public class IsbnThirteen {
 <.> You have to change the name, so it works
 
 .at.htl.microservices.book.BookResource
-[source,java,highlight=16-18;28]
+[source,java,highlight=16-18;27]
 ----
 package at.htl.microservices.book;
 
@@ -1336,10 +1341,387 @@ public class BookResource {
 }
 ----
 
+== Executing the Application
+
+* Now we will use docker-compose to run the app.
+* Each executable (project) will be dockerized.
+
+
+=== Install graalvm
+
+* We are not really installing graalvm
+* We will
+** downloading graalvm into a folder
+** extract it
+** (create a symlink)
+** add environment variables
+
+==== Download graalvm
+
+* https://www.graalvm.org/downloads/
+
+* GraalVM Community xx.yy.zz
+** kbd:[DOWNLOAD FROM GITHUB]
+
+image:040-download-graalvm1.png[]
+
+.ie for MacOS
+* https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-21.3.0/graalvm-ce-java17-darwin-amd64-21.3.0.tar.gz
+
+* Copy the file into /opt
+
+==== Extract graalvm-file
+
+.tar -xzvf <filename>
+[source,shell]
+----
+tar -xzvf graalvm-ce-java17-darwin-amd64-21.3.0.tar.gz
+----
+
+==== Create Symbolic Link (symlink)
+
+.ln -s <filename> graalvm
+[source,shell]
+----
+ln -s graalvm-ce-java17-darwin-amd64-21.3.0.tar.gz graalvm
+----
+
+==== Install Native Image
+
+* https://www.graalvm.org/reference-manual/native-image/#install-native-image[GraalVM Docs - Native Image, window="_blank"]
+* https://quarkus.io/guides/building-native-image[Quarkus - Building a Native Executable, window="_blank"]
+
+[source,shell]
+----
+cd /opt/graalvm/Contents/Home/bin
+./gu install native-image
+----
+
+.output
+----
+Downloading: Release index file from oca.opensource.oracle.com
+Downloading: Component catalog from www.graalvm.org
+Processing Component: Native Image
+Downloading: Component native-image: Native Image  from github.com
+Installing new component: Native Image (org.graalvm.native-image, version 21.3.0)
+----
+
+
+==== Set Environment Variables
+
+.you have to set these environment variables for each terminal, where you will compile/package the app
+[source,shell]
+----
+export GRAALVM_HOME=/opt/graalvm/Contents/Home
+env | grep GRAAL
+$GRAALVM_HOME/bin/java -version
+$GRAALVM_HOME/bin/native-image --version
+----
+
+.output
+----
+GRAALVM_HOME=/opt/graalvm/Contents/Home
+openjdk version "17.0.1" 2021-10-19
+OpenJDK Runtime Environment GraalVM CE 21.3.0 (build 17.0.1+12-jvmci-21.3-b05)
+OpenJDK 64-Bit Server VM GraalVM CE 21.3.0 (build 17.0.1+12-jvmci-21.3-b05, mixed mode, sharing)
+GraalVM 21.3.0 Java 17 CE (Java Version 17.0.1+12-jvmci-21.3-b05
+----
+
+=== Building Native Linux Executables
+
+* We will dockerize the app in a Linux container, so we need Linux binaries.
+
+
+[source,shell]
+----
+mvn package -Dquarkus.package.type=native -Dmaven.test.skip=true
+----
+
+.output
+[%collapsible]
+====
+----
+[INFO]
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ rest-number ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 3 resources
+[INFO]
+[INFO] --- maven-compiler-plugin:3.8.1:compile (default-compile) @ rest-number ---
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 3 source files to /Users/stuetz/SynologyDrive/htl/skripten/themen/jakartaee-microprofile/udemy-microservices-goncalves/labs/vintage-store/rest-number/target/classes
+[INFO]
+[INFO] --- quarkus-maven-plugin:2.3.1.Final:generate-code-tests (default) @ rest-number ---
+[INFO]
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ rest-number ---
+[INFO] Not copying test resources
+[INFO]
+[INFO] --- maven-compiler-plugin:3.8.1:testCompile (default-testCompile) @ rest-number ---
+[INFO] Not compiling test sources
+[INFO]
+[INFO] --- maven-surefire-plugin:3.0.0-M5:test (default-test) @ rest-number ---
+[INFO] Tests are skipped.
+[INFO]
+[INFO] --- maven-jar-plugin:2.4:jar (default-jar) @ rest-number ---
+[INFO] Building jar: /Users/stuetz/SynologyDrive/htl/skripten/themen/jakartaee-microprofile/udemy-microservices-goncalves/labs/vintage-store/rest-number/target/rest-number-1.0.0-SNAPSHOT.jar
+[INFO]
+[INFO] --- quarkus-maven-plugin:2.3.1.Final:build (default) @ rest-number ---
+[INFO] [org.jboss.threads] JBoss Threads version 3.4.2.Final
+[INFO] [io.quarkus.deployment.pkg.steps.JarResultBuildStep] Building native image source jar: /Users/stuetz/SynologyDrive/htl/skripten/themen/jakartaee-microprofile/udemy-microservices-goncalves/labs/vintage-store/rest-number/target/rest-number-1.0.0-SNAPSHOT-native-image-source-jar/rest-number-1.0.0-SNAPSHOT-runner.jar
+[INFO] [io.quarkus.deployment.pkg.steps.NativeImageBuildStep] Building native image from /Users/stuetz/SynologyDrive/htl/skripten/themen/jakartaee-microprofile/udemy-microservices-goncalves/labs/vintage-store/rest-number/target/rest-number-1.0.0-SNAPSHOT-native-image-source-jar/rest-number-1.0.0-SNAPSHOT-runner.jar
+[INFO] [io.quarkus.deployment.pkg.steps.NativeImageBuildStep] Running Quarkus native-image plugin on GraalVM 21.3.0 Java 17 CE (Java Version 17.0.1+12-jvmci-21.3-b05)
+[INFO] [io.quarkus.deployment.pkg.steps.NativeImageBuildRunner] /opt/graalvm/Contents/Home/bin/native-image -J-Dsun.nio.ch.maxUpdateArraySize=100 -J-Djava.util.logging.manager=org.jboss.logmanager.LogManager -J-Dvertx.logger-delegate-factory-class-name=io.quarkus.vertx.core.runtime.VertxLogDelegateFactory -J-Dvertx.disableDnsResolver=true -J-Dio.netty.leakDetection.level=DISABLED -J-Dio.netty.allocator.maxOrder=3 -J-Duser.language=en -J-Duser.country=US -J-Dfile.encoding=UTF-8 -H:InitialCollectionPolicy=com.oracle.svm.core.genscavenge.CollectionPolicy\$BySpaceAndTime -H:+JNI -H:+AllowFoldMethods -H:FallbackThreshold=0 -H:+ReportExceptionStackTraces -H:-AddAllCharsets -H:EnableURLProtocols=http -H:-UseServiceLoaderFeature -H:+StackTrace -H:-ParseOnce rest-number-1.0.0-SNAPSHOT-runner -jar rest-number-1.0.0-SNAPSHOT-runner.jar
+[rest-number-1.0.0-SNAPSHOT-runner:22926]    classlist:   1,360.63 ms,  0.94 GB
+[rest-number-1.0.0-SNAPSHOT-runner:22926]        (cap):   1,614.70 ms,  0.94 GB
+[rest-number-1.0.0-SNAPSHOT-runner:22926]        setup:   3,265.18 ms,  0.94 GB
+The bundle named: messages, has not been found. If the bundle is part of a module, verify the bundle name is a fully qualified class name. Otherwise verify the bundle path is accessible in the classpath.
+18:12:28,628 INFO  [org.jbo.threads] JBoss Threads version 3.4.2.Final
+[rest-number-1.0.0-SNAPSHOT-runner:22926]     (clinit):     608.56 ms,  5.09 GB
+[rest-number-1.0.0-SNAPSHOT-runner:22926]   (typeflow):   1,843.88 ms,  5.09 GB
+[rest-number-1.0.0-SNAPSHOT-runner:22926]    (objects):  13,823.93 ms,  5.09 GB
+[rest-number-1.0.0-SNAPSHOT-runner:22926]   (features):   3,693.53 ms,  5.09 GB
+[rest-number-1.0.0-SNAPSHOT-runner:22926]     analysis:  21,432.38 ms,  5.09 GB
+[rest-number-1.0.0-SNAPSHOT-runner:22926]     universe:   1,628.18 ms,  5.09 GB
+[rest-number-1.0.0-SNAPSHOT-runner:22926]      (parse):   1,932.56 ms,  5.09 GB
+[rest-number-1.0.0-SNAPSHOT-runner:22926]     (inline):   4,292.92 ms,  6.01 GB
+[rest-number-1.0.0-SNAPSHOT-runner:22926]    (compile):  19,448.10 ms,  6.14 GB
+[rest-number-1.0.0-SNAPSHOT-runner:22926]      compile:  28,442.27 ms,  6.14 GB
+[rest-number-1.0.0-SNAPSHOT-runner:22926]        image:   3,745.43 ms,  6.14 GB
+[rest-number-1.0.0-SNAPSHOT-runner:22926]        write:   1,049.71 ms,  6.14 GB
+[rest-number-1.0.0-SNAPSHOT-runner:22926]      [total]:  61,232.13 ms,  6.14 GB
+# Printing build artifacts to: /Users/stuetz/SynologyDrive/htl/skripten/themen/jakartaee-microprofile/udemy-microservices-goncalves/labs/vintage-store/rest-number/target/rest-number-1.0.0-SNAPSHOT-native-image-source-jar/rest-number-1.0.0-SNAPSHOT-runner.build_artifacts.txt
+[INFO] [io.quarkus.deployment.QuarkusAugmentor] Quarkus augmentation completed in 64118ms
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  01:22 min
+[INFO] Finished at: 2021-10-27T18:13:18+02:00
+[INFO] ------------------------------------------------------------------------
+----
+====
+
+* Troubleshooting
+** Check the Quarkus - version. This fixed the error in my case.
+
+
+
+[source,shell]
+----
+ls -lh target
+----
+
+.output
+image::041-rest-number-runner.png[]
+
+.run the app
+[source,shell]
+----
+target/rest-number-1.0.0-SNAPSHOT-runner
+----
+
+.output
+----
+
+███╗   ██╗██╗   ██╗███╗   ███╗██████╗ ███████╗██████╗
+████╗  ██║██║   ██║████╗ ████║██╔══██╗██╔════╝██╔══██╗
+██╔██╗ ██║██║   ██║██╔████╔██║██████╔╝█████╗  ██████╔╝
+██║╚██╗██║██║   ██║██║╚██╔╝██║██╔══██╗██╔══╝  ██╔══██╗
+██║ ╚████║╚██████╔╝██║ ╚═╝ ██║██████╔╝███████╗██║  ██║
+╚═╝  ╚═══╝ ╚═════╝ ╚═╝     ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═╝
+
+
+
+                        Powered by Quarkus 2.3.1.Final
+2021-10-27 18:27:59,799 INFO  [io.quarkus] (main) rest-number 1.0.0-SNAPSHOT native (powered by Quarkus 2.3.1.Final) started in 0.017s. Listening on: http://0.0.0.0:8701
+2021-10-27 18:27:59,804 INFO  [io.quarkus] (main) Profile prod activated.
+2021-10-27 18:27:59,804 INFO  [io.quarkus] (main) Installed features: [cdi, resteasy, resteasy-jsonb, smallrye-context-propagation, smallrye-openapi, vertx]
+----
+
+* It starts in 0.017s - this is quite impressive
+
+.Access the API
+[source,shell]
+----
+curl localhost:8701/api/numbers
+----
+
+.output
+----
+{"isbn_10":"10-34614","isbn_13":"13-82953702"}%
+----
+
+==== Package the Project in a Docker Container
+
+* When compiling the sources in a Docker container, we get binaries for Linux
+
+.for rest-number and rest-book
+[source,shell]
+----
+mvn package -Dquarkus.package.type=native \
+            -Dquarkus.native.container-build=true \
+            -Dmaven.test.skip=true
+----
+
+
+.output
+[%collapsible]
+====
+----
+[INFO] Scanning for projects...
+[INFO]
+[INFO] ------------------< at.htl.microservices:rest-number >------------------
+[INFO] Building rest-number 1.0.0-SNAPSHOT
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO]
+[INFO] --- quarkus-maven-plugin:2.3.1.Final:generate-code (default) @ rest-number ---
+[INFO]
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ rest-number ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 3 resources
+[INFO]
+[INFO] --- maven-compiler-plugin:3.8.1:compile (default-compile) @ rest-number ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO]
+[INFO] --- quarkus-maven-plugin:2.3.1.Final:generate-code-tests (default) @ rest-number ---
+[INFO]
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ rest-number ---
+[INFO] Not copying test resources
+[INFO]
+[INFO] --- maven-compiler-plugin:3.8.1:testCompile (default-testCompile) @ rest-number ---
+[INFO] Not compiling test sources
+[INFO]
+[INFO] --- maven-surefire-plugin:3.0.0-M5:test (default-test) @ rest-number ---
+[INFO] Tests are skipped.
+[INFO]
+[INFO] --- maven-jar-plugin:2.4:jar (default-jar) @ rest-number ---
+[INFO]
+[INFO] --- quarkus-maven-plugin:2.3.1.Final:build (default) @ rest-number ---
+[INFO] [org.jboss.threads] JBoss Threads version 3.4.2.Final
+[INFO] [io.quarkus.deployment.pkg.steps.JarResultBuildStep] Building native image source jar: /Users/stuetz/SynologyDrive/htl/skripten/themen/jakartaee-microprofile/udemy-microservices-goncalves/labs/vintage-store/rest-number/target/rest-number-1.0.0-SNAPSHOT-native-image-source-jar/rest-number-1.0.0-SNAPSHOT-runner.jar
+[INFO] [io.quarkus.deployment.pkg.steps.NativeImageBuildStep] Building native image from /Users/stuetz/SynologyDrive/htl/skripten/themen/jakartaee-microprofile/udemy-microservices-goncalves/labs/vintage-store/rest-number/target/rest-number-1.0.0-SNAPSHOT-native-image-source-jar/rest-number-1.0.0-SNAPSHOT-runner.jar
+[INFO] [io.quarkus.deployment.pkg.steps.NativeImageBuildContainerRunner] Using docker to run the native image builder
+[INFO] [io.quarkus.deployment.pkg.steps.NativeImageBuildContainerRunner] Checking image status quay.io/quarkus/ubi-quarkus-native-image:21.2-java11
+21.2-java11: Pulling from quarkus/ubi-quarkus-native-image
+Digest: sha256:6079eb01031a117a92c75d17c44498a981cf92a648e3cac83801471aedc88e9c
+Status: Image is up to date for quay.io/quarkus/ubi-quarkus-native-image:21.2-java11
+quay.io/quarkus/ubi-quarkus-native-image:21.2-java11
+[INFO] [io.quarkus.deployment.pkg.steps.NativeImageBuildStep] Running Quarkus native-image plugin on GraalVM 21.2.0 Java 11 CE (Java Version 11.0.12+6-jvmci-21.2-b08)
+[INFO] [io.quarkus.deployment.pkg.steps.NativeImageBuildRunner] docker run --env LANG=C --rm -v /Users/stuetz/SynologyDrive/htl/skripten/themen/jakartaee-microprofile/udemy-microservices-goncalves/labs/vintage-store/rest-number/target/rest-number-1.0.0-SNAPSHOT-native-image-source-jar:/project:z --name build-native-SwsvB quay.io/quarkus/ubi-quarkus-native-image:21.2-java11 -J-Dsun.nio.ch.maxUpdateArraySize=100 -J-Djava.util.logging.manager=org.jboss.logmanager.LogManager -J-Dvertx.logger-delegate-factory-class-name=io.quarkus.vertx.core.runtime.VertxLogDelegateFactory -J-Dvertx.disableDnsResolver=true -J-Dio.netty.leakDetection.level=DISABLED -J-Dio.netty.allocator.maxOrder=3 -J-Duser.language=en -J-Duser.country=US -J-Dfile.encoding=UTF-8 -H:InitialCollectionPolicy=com.oracle.svm.core.genscavenge.CollectionPolicy\$BySpaceAndTime -H:+JNI -H:+AllowFoldMethods -H:FallbackThreshold=0 -H:+ReportExceptionStackTraces -H:-AddAllCharsets -H:EnableURLProtocols=http -H:-UseServiceLoaderFeature -H:+StackTrace -H:-ParseOnce rest-number-1.0.0-SNAPSHOT-runner -jar rest-number-1.0.0-SNAPSHOT-runner.jar
+[rest-number-1.0.0-SNAPSHOT-runner:26]    classlist:   7,566.61 ms,  0.94 GB
+[rest-number-1.0.0-SNAPSHOT-runner:26]        (cap):     853.63 ms,  0.94 GB
+[rest-number-1.0.0-SNAPSHOT-runner:26]        setup:   3,924.04 ms,  0.93 GB
+The bundle named: messages, has not been found. If the bundle is part of a module, verify the bundle name is a fully qualified class name. Otherwise verify the bundle path is accessible in the classpath.
+18:24:32,075 INFO  [org.jbo.threads] JBoss Threads version 3.4.2.Final
+[rest-number-1.0.0-SNAPSHOT-runner:26]     (clinit):   2,086.13 ms,  3.62 GB
+[rest-number-1.0.0-SNAPSHOT-runner:26]   (typeflow):  21,140.88 ms,  3.62 GB
+[rest-number-1.0.0-SNAPSHOT-runner:26]    (objects):  30,809.78 ms,  3.62 GB
+[rest-number-1.0.0-SNAPSHOT-runner:26]   (features):   2,170.73 ms,  3.62 GB
+[rest-number-1.0.0-SNAPSHOT-runner:26]     analysis:  59,841.05 ms,  3.62 GB
+[rest-number-1.0.0-SNAPSHOT-runner:26]     universe:   4,101.54 ms,  3.62 GB
+[rest-number-1.0.0-SNAPSHOT-runner:26]      (parse):   9,845.88 ms,  3.42 GB
+[rest-number-1.0.0-SNAPSHOT-runner:26]     (inline):  10,023.26 ms,  4.12 GB
+[rest-number-1.0.0-SNAPSHOT-runner:26]    (compile):  42,131.36 ms,  4.03 GB
+[rest-number-1.0.0-SNAPSHOT-runner:26]      compile:  65,949.40 ms,  4.03 GB
+[rest-number-1.0.0-SNAPSHOT-runner:26]        image:   8,307.99 ms,  4.06 GB
+[rest-number-1.0.0-SNAPSHOT-runner:26]        write:   4,703.13 ms,  4.06 GB
+[rest-number-1.0.0-SNAPSHOT-runner:26]      [total]: 155,221.80 ms,  4.06 GB
+# Printing build artifacts to: /project/rest-number-1.0.0-SNAPSHOT-runner.build_artifacts.txt
+[INFO] [io.quarkus.deployment.pkg.steps.NativeImageBuildRunner] docker run --env LANG=C --rm -v /Users/stuetz/SynologyDrive/htl/skripten/themen/jakartaee-microprofile/udemy-microservices-goncalves/labs/vintage-store/rest-number/target/rest-number-1.0.0-SNAPSHOT-native-image-source-jar:/project:z --entrypoint /bin/bash quay.io/quarkus/ubi-quarkus-native-image:21.2-java11 -c objcopy --strip-debug rest-number-1.0.0-SNAPSHOT-runner
+[INFO] [io.quarkus.deployment.QuarkusAugmentor] Quarkus augmentation completed in 164693ms
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  02:47 min
+[INFO] Finished at: 2021-10-27T20:26:42+02:00
+[INFO] ------------------------------------------------------------------------
+----
+====
+
+*Because it is compiled in a Linux Docker continer, it is not possible to start the app under MacOS.
+
+
+[source,shell]
+----
+ target/rest-number-1.0.0-SNAPSHOT-runner
+----
+
+.output
+----
+zsh: exec format error: target/rest-number-1.0.0-SNAPSHOT-runner
+----
+
+
+* Troubleshooting
+
+.Error 137 -> increase memory for Docker-Desktop
+[%collapsible]
+====
+----
+[ERROR] Caused by: java.lang.RuntimeException: Image generation failed. Exit code was 137 which indicates an out of memory error. Consider increasing the Xmx value for native image generation by setting the "quarkus.native.native-image-xmx" property
+
+----
+
+image::042-docker-desktop-memory.png[]
+
+====
 
 
 
 
+
+
+
+[source,shell]
+----
+
+----
+
+
+
+
+
+
+
+
+[source,shell]
+----
+
+----
+
+
+
+
+
+
+
+
+[source,shell]
+----
+
+----
+
+
+
+
+
+
+
+
+[source,shell]
+----
+
+----
+
+
+
+
+
+
+
+
+[source,shell]
+----
+
+----
 
 
 
