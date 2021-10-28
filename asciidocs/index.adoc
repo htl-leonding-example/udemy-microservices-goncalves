@@ -1896,25 +1896,39 @@ http --form POST :8702/api/books title='Quarkus' author='Susi' year=2021 genre='
 image::043-response-docker-compose.png[]
 --
 
+=== Test the Resilience
+
+.stop the rest-number service
 [source,shell]
 ----
-
+docker container kill vintage-store-rest-number-1
 ----
 
-
-
-
+.Access the REST API
 [source,shell]
 ----
+ curl -X POST http://localhost:8702/api/books -d "title=Quarkus&author=Susi&year=2021&genre=IT"
+----
 
+.output
+----
+{"author":"Susi","creation_date":"2021-10-28","genre":"IT","isbn_13":"Will be set later","title":"Quarkus","year_of_publication":2021}%
 ----
 
 
+.shutdown the whole system
+[source,shell]
+----
+docker-compose -f vintagestore-docker-compose.yml down
+----
 
-
-
-
-
+.output
+----
+[+] Running 3/3
+ ⠿ Container vintage-store-rest-book-1    Remove...                                       0.2s
+ ⠿ Container vintage-store-rest-number-1  Remo...                                         0.1s
+ ⠿ Network vintage-store_default          Removed                                         0.1s
+----
 
 
 
