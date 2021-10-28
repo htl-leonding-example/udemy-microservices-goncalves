@@ -1664,8 +1664,242 @@ image::042-docker-desktop-memory.png[]
 
 ====
 
+=== Build Docker image
+
+* https://quarkus.io/guides/container-image[Container Images, windows="_blank"]
+* Two options:
+** Jib (no need for Docker running)
+** Docker Extensions
+** s2i (für openShift)
+
+* mvn quarkus:add-extension -Dextensions="docker"
+
+.pom.xml
+[source,xml]
+----
+  <dependencies>
+    ...
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-container-image-docker</artifactId>
+    </dependency>
+  </dependencies>
+----
 
 
+[source,shell]
+----
+FROM registry.access.redhat.com/ubi8/ubi-minimal:8.4  # <.>
+WORKDIR /work/
+RUN chown 1001 /work \
+    && chmod "g+rwX" /work \
+    && chown 1001:root /work
+COPY --chown=1001:root target/*-runner /work/application
+
+EXPOSE 8080  # <.>
+USER 1001
+
+CMD ["./application", "-Dquarkus.http.host=0.0.0.0"]
+----
+
+<.> Small Linux w/o Java
+<.> we will use 8701 for rest-number and 8702 for rest-book
+
+IMPORTANT: Change the port-numbers in the two project to 8701 and 8702
+
+.for rest-number and rest-book
+[source,shell]
+----
+mvn package -Dquarkus.package.type=native \
+            -Dquarkus.native.container-build=true \
+            -Dquarkus.container-image.build=true
+----
+
+----
+...
+[INFO] [io.quarkus.deployment.QuarkusAugmentor] Quarkus augmentation completed in 133937ms
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  02:22 min
+[INFO] Finished at: 2021-10-27T20:59:52+02:00
+[INFO] ------------------------------------------------------------------------
+----
+
+.check docker container
+[source,shell]
+----
+docker image ls | grep stuetz
+----
+
+.output
+----
+stuetz/rest-book                           1.0.0-SNAPSHOT   866272ea114f   2 minutes ago   158MB
+stuetz/rest-number                         1.0.0-SNAPSHOT   ff6976b0370f   5 minutes ago   151MB
+----
+
+
+==== Run the Docker Containers
+
+
+
+
+[source,shell]
+----
+docker run --rm -p 8701:8701 stuetz/rest-number:1.0.0-SNAPSHOT
+docker run --rm -p 8702:8702 stuetz/rest-book:1.0.0-SNAPSHOT
+----
+
+* Now you can access the rest-endpoints
+
+
+
+=== Create a docker-compose.yml
+
+.vintagestore-docker-compose.yml
+[source,shell]
+----
+version : "3"
+services:
+  rest-number:
+    image: "stuetz/rest-number:1.0.0-SNAPSHOT"
+    ports:
+      - "8701:8701"
+  rest-book:
+    image: "stuetz/rest-book:1.0.0-SNAPSHOT"
+    ports:
+      - "8702:8702"
+    environment:
+      - NUMBER_PROXY_MP_REST_URL=http://rest-number:8701
+----
+
+* How do we get the environment variable
+** In the application.properties of rest-book project your find
++
+[source,properties]
+----
+number.proxy/mp-rest/url=http://localhost:8701
+----
+** Now convert this for the docker-compose.yml-file
+. copy the line into the yml-file
++
+[source,properties]
+----
+number.proxy/mp-rest/url=http://localhost:8701
+----
+
+. make all uppercase
++
+[source,properties]
+----
+NUMBER.PROXY/MP-REST/URL=http://localhost:8701
+----
+
+. replace all non-letter-chars with underline
++
+[source,properties]
+----
+NUMBER_PROXY_MP_REST_URL=http://localhost:8701
+----
+
+. replace localhost with the name of the docker-compose - service
++
+[source,properties]
+----
+NUMBER_PROXY_MP_REST_URL=http://rest-number:8701
+----
+
+=== Run the docker-compose Services
+
+[source,shell]
+----
+docker-compose -f vintage-docker-compose.yml up
+----
+
+* we omit -d, so we can watch the logs
+
+.output
+[%collapsible]
+====
+----
+[+] Running 3/3
+ ⠿ Network vintage-store_default          Created                                                                 0.0s
+ ⠿ Container vintage-store-rest-number-1  Created                                                                 0.1s
+ ⠿ Container vintage-store-rest-book-1    Created                                                                 0.1s
+Attaching to vintage-store-rest-book-1, vintage-store-rest-number-1
+vintage-store-rest-number-1  |
+vintage-store-rest-number-1  |
+vintage-store-rest-number-1  | ███╗   ██╗██╗   ██╗███╗   ███╗██████╗ ███████╗██████╗
+vintage-store-rest-number-1  | ████╗  ██║██║   ██║████╗ ████║██╔══██╗██╔════╝██╔══██╗
+vintage-store-rest-number-1  | ██╔██╗ ██║██║   ██║██╔████╔██║██████╔╝█████╗  ██████╔╝
+vintage-store-rest-number-1  | ██║╚██╗██║██║   ██║██║╚██╔╝██║██╔══██╗██╔══╝  ██╔══██╗
+vintage-store-rest-number-1  | ██║ ╚████║╚██████╔╝██║ ╚═╝ ██║██████╔╝███████╗██║  ██║
+vintage-store-rest-number-1  | ╚═╝  ╚═══╝ ╚═════╝ ╚═╝     ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═╝
+vintage-store-rest-number-1  |
+vintage-store-rest-number-1  |
+vintage-store-rest-number-1  |
+vintage-store-rest-number-1  |                         Powered by Quarkus 2.3.1.Final
+vintage-store-rest-number-1  | 2021-10-28 08:44:40,801 INFO  [io.quarkus] (main) rest-number 1.0.0-SNAPSHOT native (powered by Quarkus 2.3.1.Final) started in 0.022s. Listening on: http://0.0.0.0:8701
+vintage-store-rest-number-1  | 2021-10-28 08:44:40,801 INFO  [io.quarkus] (main) Profile prod activated.
+vintage-store-rest-number-1  | 2021-10-28 08:44:40,801 INFO  [io.quarkus] (main) Installed features: [cdi, resteasy, resteasy-jsonb, smallrye-context-propagation, smallrye-openapi, vertx]
+vintage-store-rest-book-1    | ██████╗  ██████╗  ██████╗ ██╗  ██╗
+vintage-store-rest-book-1    | ██╔══██╗██╔═══██╗██╔═══██╗██║ ██╔╝
+vintage-store-rest-book-1    | ██████╔╝██║   ██║██║   ██║█████╔╝
+vintage-store-rest-book-1    | ██╔══██╗██║   ██║██║   ██║██╔═██╗
+vintage-store-rest-book-1    | ██████╔╝╚██████╔╝╚██████╔╝██║  ██╗
+vintage-store-rest-book-1    | ╚═════╝  ╚═════╝  ╚═════╝ ╚═╝  ╚═╝
+vintage-store-rest-book-1    |     Powered by Quarkus 2.3.1.Final
+vintage-store-rest-book-1    | 2021-10-28 08:44:40,816 INFO  [io.quarkus] (main) rest-book 1.0.0-SNAPSHOT native (powered by Quarkus 2.3.1.Final) started in 0.020s. Listening on: http://0.0.0.0:8702
+vintage-store-rest-book-1    | 2021-10-28 08:44:40,817 INFO  [io.quarkus] (main) Profile prod activated.
+vintage-store-rest-book-1    | 2021-10-28 08:44:40,817 INFO  [io.quarkus] (main) Installed features: [cdi, rest-client, resteasy, resteasy-jsonb, smallrye-context-propagation, smallrye-fault-tolerance, smallrye-openapi, vertx]
+----
+====
+
+* Now we will access the endpoint
+
+. curl
++
+[source,shell]
+----
+curl -X POST http://localhost:8702/api/books -d "title=Quarkus&author=Susi&year=2021&genre=IT"
+----
++
+.output
+----
+{"author":"Susi","creation_date":"2021-10-28","genre":"IT","isbn_13":"13-21142163","title":"Quarkus","year_of_publication":2021}%
+----
+
+. requests.http
++
+[source,shell]
+----
+POST localhost:8702/api/books
+Content-Type: application/x-www-form-urlencoded
+
+title=Quarkus&author=Susi&year=2021&genre=IT
+----
++
+.output
+--
+image::044-response-docker-compose-ide.png[]
+--
+
+. httpie
++
+[source,shell]
+----
+http --form POST :8702/api/books title='Quarkus' author='Susi' year=2021 genre='IT'
+----
++
+.output
+--
+image::043-response-docker-compose.png[]
+--
+
+[source,shell]
+----
+
+----
 
 
 
@@ -1682,46 +1916,6 @@ image::042-docker-desktop-memory.png[]
 
 
 
-[source,shell]
-----
-
-----
-
-
-
-
-
-
-
-
-[source,shell]
-----
-
-----
-
-
-
-
-
-
-
-
-[source,shell]
-----
-
-----
-
-
-
-
-
-
-
-
-[source,shell]
-----
-
-----
 
 
 
